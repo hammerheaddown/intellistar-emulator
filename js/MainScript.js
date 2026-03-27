@@ -301,6 +301,7 @@ function endSequence(){
   clearInfoBar();
   // Notify compositor parent that the weather rotation is done (auto-dismiss)
   if (CONFIG._oneShot) {
+    localStorage.removeItem('loop'); // don't stay in loop mode after one-shot
     window.parent.postMessage('weather-done', '*');
     window.top.postMessage('weather-done', '*');
   }

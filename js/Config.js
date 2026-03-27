@@ -149,8 +149,13 @@ CONFIG.unitField = CONFIG.units === 'm' ? 'metric' : (CONFIG.units === 'h' ? 'uk
 (function() {
   var p = new URLSearchParams(window.location.search);
   if (p.has('zip')) {
+    // Set BOTH localStorage entries submit() checks to trigger auto-start
     localStorage.setItem('zip-code', p.get('zip'));
-    CONFIG.loop = true; // triggers auto-start in load()
+    localStorage.setItem('loop', 'y');
+    CONFIG.loop = true;
+  } else {
+    // No zip param — clear loop flag so settings screen shows normally
+    localStorage.removeItem('loop');
   }
   if (p.has('crawl'))   CONFIG.crawl = decodeURIComponent(p.get('crawl'));
   if (p.has('station')) CONFIG._stationOverride = decodeURIComponent(p.get('station'));
