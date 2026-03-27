@@ -149,10 +149,14 @@ function startAnimation(){
   var vol = (CONFIG._volume !== undefined) ? CONFIG._volume : 1;
 
   if (CONFIG._fast) {
-    // Skip jingle + greeting page — go straight to weather
+    // Skip jingle + greeting page — go straight to weather.
+    // Start muted (always allowed by browser autoplay policy), then unmute + fade in.
+    music.muted = true;
     music.volume = 0;
-    music.play().catch(function(){});
-    _fadeAudio(music, 0, vol, 1500);
+    music.play().then(function() {
+      music.muted = false;
+      _fadeAudio(music, 0, vol, 1500);
+    }).catch(function(){});
     clearGreetingPage();
   } else {
     jingle.volume = vol;
