@@ -20,6 +20,20 @@ var music;
 
 window.onload = function () {
 
+  // ── URL param auto-start: skip settings entirely ──────────────────────────
+  var _urlParams = new URLSearchParams(window.location.search);
+  if (_urlParams.has('zip')) {
+    zipCode = _urlParams.get('zip');
+    CONFIG.locationMode = 'POSTAL';
+    preLoadMusic();
+    setMainBackground();
+    resizeWindow();
+    setClockTime();
+    fetchCurrentWeather();
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   CONFIG.addLocationOption('airport-code', 'Airport', 'ATL or KATL')
   CONFIG.addLocationOption('zip-code', 'Postal', '00000')
 
