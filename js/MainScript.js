@@ -108,7 +108,8 @@ function setInformation(){
   setCurrentConditions();
   setTimelineEvents();
   hideSettings();
-  setTimeout(startAnimation, 1000);
+  // Fast mode (URL param ?zip=): skip 1s delay
+  if (CONFIG._fast) startAnimation(); else setTimeout(startAnimation, 1000);
 }
 
 function setMainBackground(){
@@ -121,16 +122,44 @@ function checkStormMusic(){
   }
 }
 
+// ── Audio fade helper ──────────────────────────────────────────────────────────
+function _fadeAudio(audio, from, to, duration) {
+  var steps = 30, interval = duration / steps, step = (to - from) / steps, cur = from;
+  audio.volume = Math.max(0, Math.min(1, from));
+  var t = setInterval(function() {
+    cur += step;
+    if ((step > 0 && cur >= to) || (step < 0 && cur <= to)) {
+      audio.volume = Math.max(0, Math.min(1, to));
+      clearInterval(t);
+    } else {
+      audio.volume = Math.max(0, Math.min(1, cur));
+    }
+  }, interval);
+}
+
 function startAnimation(){
   setInitialPositionCurrentPage();
+  var vol = (CONFIG._volume !== undefined) ? CONFIG._volume : 1;
 
-  jingle.play();
-  setTimeout(startMusic, 5000)
-  executeGreetingPage();
+  if (CONFIG._fast) {
+    // Skip jingle + greeting page — go straight to weather
+    music.volume = 0;
+    music.play().catch(function(){});
+    _fadeAudio(music, 0, vol, 1500);
+    clearGreetingPage();
+  } else {
+    jingle.volume = vol;
+    jingle.play().catch(function(){});
+    setTimeout(startMusic, 5000);
+    executeGreetingPage();
+  }
 }
 
 function startMusic(){
-  music.play();
+  var vol = (CONFIG._volume !== undefined) ? CONFIG._volume : 1;
+  music.volume = 0;
+  music.play().catch(function(){});
+  _fadeAudio(music, 0, vol, 2000);
 }
 
 function hideSettings(){
@@ -313,11 +342,17 @@ function scrollCC(){
 // Called at end of sequence. Animates everything out and shows ending text
 function endSequence(){
   clearInfoBar();
-  // Notify compositor parent that the weather rotation is done (auto-dismiss)
+  // Fade out music
+  if (music && !music.paused) {
+    _fadeAudio(music, music.volume, 0, 1200);
+  }
   if (CONFIG._oneShot) {
-    localStorage.removeItem('loop'); // don't stay in loop mode after one-shot
-    window.parent.postMessage('weather-done', '*');
-    window.top.postMessage('weather-done', '*');
+    // Wait for fade before firing postMessage
+    setTimeout(function() {
+      localStorage.removeItem('loop');
+      window.parent.postMessage('weather-done', '*');
+      window.top.postMessage('weather-done', '*');
+    }, 1300);
   }
 }
 

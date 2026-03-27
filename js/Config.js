@@ -157,12 +157,16 @@ CONFIG.unitField = CONFIG.units === 'm' ? 'metric' : (CONFIG.units === 'h' ? 'uk
     // No zip param — clear loop flag so settings screen shows normally
     localStorage.removeItem('loop');
   }
-  if (p.has('crawl'))   CONFIG.crawl = decodeURIComponent(p.get('crawl'));
-  if (p.has('station')) CONFIG._stationOverride = decodeURIComponent(p.get('station'));
+  if (p.has('crawl'))    CONFIG.crawl = decodeURIComponent(p.get('crawl'));
+  if (p.has('greeting')) CONFIG.greeting = decodeURIComponent(p.get('greeting'));
+  if (p.has('station'))  CONFIG._stationOverride = decodeURIComponent(p.get('station'));
+  if (p.has('vol'))      CONFIG._volume = Math.max(0, Math.min(1, parseFloat(p.get('vol')) || 0.5));
   if (p.has('units') && p.get('units') === 'metric') {
     CONFIG.units     = 'm';
     CONFIG.unitField = 'metric';
   }
   // loop=0 means one-shot: fire postMessage('weather-done') when rotation ends
   if (p.has('loop') && p.get('loop') === '0') CONFIG._oneShot = true;
+  // fast=1 or zip param: skip jingle + greeting page
+  if (p.has('zip') || p.get('fast') === '1') CONFIG._fast = true;
 })();
