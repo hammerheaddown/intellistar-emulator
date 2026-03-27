@@ -141,7 +141,7 @@ window.CONFIG = {
   }
 }
 
-CONFIG.unitField = CONFIG.units === 'm' ? 'metric' : (CONFIG.units === 'h' ? 'uk_hybrid' : 'imperial')
+CONFIG.unitField = CONFIG.units === 'm' ? 'metric' : (CONFIG.units === 'h' ? 'uk_hybrid' : 'imperial');
 
 // ── URL Parameter Bootstrap ───────────────────────────────────────────────────
 // Allows the compositor weather layer to pass params and skip the settings screen.
