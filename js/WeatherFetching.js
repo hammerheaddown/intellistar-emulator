@@ -29,7 +29,7 @@ function guessZipCode(){
     })
 }
 
-function fetchAlerts(){
+function fetchAlerts(cb){
   var alertCrawl = "";
   fetch(`https://api.weather.gov/alerts/active?point=${latitude},${longitude}`)
     .then(function(response) {
@@ -38,8 +38,7 @@ function fetchAlerts(){
         }
       response.json().then(function(data) {
         if (data.features == undefined){
-          fetchForecast();
-          return;
+          if (cb) cb(); return;
         }
         if (data.features.length == 1) {
           alerts[0] = data.features[0].properties.event + '<br>' + data.features[0].properties.description.replace("..."," ").replace(/\*/g, "")
@@ -62,9 +61,9 @@ function fetchAlerts(){
           CONFIG.crawl = alertCrawl;
         }
         alertsActive = alerts.length > 0;
-        fetchForecast();
-      });
-    })
+        if (cb) cb();
+      }).catch(function(){ if (cb) cb(); });
+    }).catch(function(){ if (cb) cb(); });
 }
 
 // ── WMO weather code helpers (replaces dead TWC API) ─────────────────────────
@@ -115,7 +114,7 @@ function _dewPoint(tempF, rh) {
   return Math.round((b*alpha/(a-alpha))*9/5+32);
 }
 
-function fetchForecast(){
+function fetchForecast(cb){
   const units = CONFIG.units==='m' ? '&temperature_unit=celsius&wind_speed_unit=kmh' : '&temperature_unit=fahrenheit&wind_speed_unit=mph';
   const speedUnit = CONFIG.units==='m' ? 'km/h' : 'mph';
   fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max${units}&forecast_days=10&timezone=auto`)
@@ -147,9 +146,9 @@ function fetchForecast(){
         outlookCondition[j] = cond.split(' ').join('<br/>');
         outlookIcon[j]      = _wmoIcon(d.weather_code[idx], true);
       }
-      fetchRadarImages();
+      if (cb) cb(); else fetchRadarImages();
     })
-    .catch(function(err){ console.error('Forecast error:', err); });
+    .catch(function(err){ console.error('Forecast error:', err); if (cb) cb(); });
 }
 
 function fetchCurrentWeather(){
@@ -194,7 +193,11 @@ function fetchCurrentWeather(){
       visibility       = 10;
       pressure         = (c.surface_pressure * 0.02953).toFixed(2);
       pressureTrend    = '';
-      fetchAlerts();
+      // Fire alerts + forecast in parallel; start sequence when both finish
+      var _done = 0;
+      function _onDone() { if (++_done === 2) fetchRadarImages(); }
+      fetchAlerts(_onDone);
+      fetchForecast(_onDone);
     })
     .catch(function(err){ if(err!=='geo') console.error('Weather error:', err); });
 }
