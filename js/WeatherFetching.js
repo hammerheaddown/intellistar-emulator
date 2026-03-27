@@ -67,132 +67,136 @@ function fetchAlerts(){
     })
 }
 
+// ── WMO weather code helpers (replaces dead TWC API) ─────────────────────────
+function _wmoCondition(code) {
+  const m = {0:'Clear',1:'Mainly Clear',2:'Partly Cloudy',3:'Cloudy',45:'Foggy',48:'Icy Fog',
+    51:'Light Drizzle',53:'Drizzle',55:'Heavy Drizzle',56:'Freezing Drizzle',57:'Freezing Drizzle',
+    61:'Light Rain',63:'Rain',65:'Heavy Rain',66:'Freezing Rain',67:'Heavy Freezing Rain',
+    71:'Light Snow',73:'Snow',75:'Heavy Snow',77:'Snow Grains',
+    80:'Rain Showers',81:'Rain Showers',82:'Heavy Showers',
+    85:'Snow Showers',86:'Heavy Snow Showers',
+    95:'Thunderstorm',96:'Thunderstorm/Hail',99:'Thunderstorm/Hail'};
+  return m[code] || 'Unknown';
+}
+function _wmoIcon(code, day) {
+  if (code===0)  return day ? 32 : 31;
+  if (code===1)  return day ? 34 : 33;
+  if (code===2)  return day ? 30 : 29;
+  if (code===3)  return 26;
+  if (code===45||code===48) return 20;
+  if (code>=51&&code<=55) return 9;
+  if (code===56||code===57) return 8;
+  if (code===61) return 11;
+  if (code===63||code===65) return 12;
+  if (code===66||code===67) return 10;
+  if (code===71) return 14;
+  if (code===73) return 16;
+  if (code===75) return 41;
+  if (code===77) return 15;
+  if (code>=80&&code<=82) return 40;
+  if (code===85||code===86) return 46;
+  if (code===95) return 38;
+  if (code===96||code===99) return 35;
+  return day ? 32 : 31;
+}
+function _wmoPrecipType(code) {
+  if (code>=71&&code<=77) return 'Snow';
+  if (code===85||code===86) return 'Snow';
+  if (code===95||code===96||code===99) return 'Rain';
+  return 'Rain';
+}
+function _degToCardinal(deg) {
+  const d=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return d[Math.round(deg/22.5)%16];
+}
+function _dewPoint(tempF, rh) {
+  const c=(tempF-32)*5/9, a=17.27, b=237.7;
+  const alpha=(a*c)/(b+c)+Math.log(rh/100);
+  return Math.round((b*alpha/(a-alpha))*9/5+32);
+}
+
 function fetchForecast(){
-  fetch(`https://api.weather.com/v1/geocode/${latitude}/${longitude}/forecast/daily/10day.json?language=${CONFIG.language}&units=${CONFIG.units}&apiKey=${CONFIG.secrets.twcAPIKey}`)
-    .then(function(response) {
-      if (response.status !== 200) {
-        console.log('forecast request error');
-        return;
+  const units = CONFIG.units==='m' ? '&temperature_unit=celsius&wind_speed_unit=kmh' : '&temperature_unit=fahrenheit&wind_speed_unit=mph';
+  const speedUnit = CONFIG.units==='m' ? 'km/h' : 'mph';
+  fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max${units}&forecast_days=10&timezone=auto`)
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      const d = data.daily;
+      // 4 forecast periods: today-day, tonight, tomorrow-day, tomorrow-night
+      const dayNow = new Date().getHours() >= 18; // rough "is it evening" check
+      const periods = [
+        {code:d.weather_code[0], temp:d.temperature_2m_max[0], pop:d.precipitation_probability_max[0]},
+        {code:d.weather_code[0], temp:d.temperature_2m_min[0], pop:d.precipitation_probability_max[0]},
+        {code:d.weather_code[1], temp:d.temperature_2m_max[1], pop:d.precipitation_probability_max[1]},
+        {code:d.weather_code[1], temp:d.temperature_2m_min[1], pop:d.precipitation_probability_max[1]},
+      ];
+      for (var i=0; i<4; i++) {
+        var isNight = (i%2===1);
+        forecastTemp[i]      = Math.round(periods[i].temp);
+        forecastIcon[i]      = _wmoIcon(periods[i].code, !isNight);
+        forecastNarrative[i] = _wmoCondition(periods[i].code)+'. High '+Math.round(d.temperature_2m_max[Math.floor(i/2)])+'°. Low '+Math.round(d.temperature_2m_min[Math.floor(i/2)])+'°.';
+        forecastPrecip[i]    = `${periods[i].pop||0}% Chance<br/> of ${_wmoPrecipType(periods[i].code)}`;
       }
-      response.json().then(function(data) {
-        let forecasts = data.forecasts
-        // narratives
-        isDay = forecasts[0].day; // If the API spits out a day forecast, use the day timings
-        let ns = []
-        ns.push(forecasts[0].day || forecasts[0].night); // there must be a day forecast so if the API doesn't provide one, just make it the night one. It won't show anyway.
-        ns.push(forecasts[0].night);
-        ns.push(forecasts[1].day);
-        ns.push(forecasts[1].night);
-        for (let i = 0; i <= 3; i++) {
-          let n = ns[i]
-          forecastTemp[i] = n.temp
-          forecastIcon[i] = n.icon_code
-          forecastNarrative[i] = n.narrative
-          forecastPrecip[i] = `${n.pop}% Chance<br/> of ${n.precip_type.charAt(0).toUpperCase() + n.precip_type.substr(1).toLowerCase()}`
-        }
-        // 7 day outlook
-        for (var i = 0; i < 7; i++) {
-          let fc = forecasts[i+1]
-          outlookHigh[i] = fc.max_temp
-          outlookLow[i] = fc.min_temp
-          outlookCondition[i] = (fc.day ? fc.day : fc.night).phrase_32char.split(' ').join('<br/>')
-          // thunderstorm doesn't fit in the 7 day outlook boxes
-          // so I multilined it similar to that of the original
-          outlookCondition[i] = outlookCondition[i].replace("Thunderstorm", "Thunder</br>storm");
-          outlookIcon[i] = (fc.day ? fc.day : fc.night).icon_code
-        }
-        fetchRadarImages();
-      })
+      isDay = !dayNow;
+      // 7-day outlook (days 1–7)
+      for (var j=0; j<7; j++) {
+        var idx=j+1;
+        outlookHigh[j]      = Math.round(d.temperature_2m_max[idx]);
+        outlookLow[j]       = Math.round(d.temperature_2m_min[idx]);
+        var cond            = _wmoCondition(d.weather_code[idx]).replace('Thunderstorm','Thunder<br/>storm');
+        outlookCondition[j] = cond.split(' ').join('<br/>');
+        outlookIcon[j]      = _wmoIcon(d.weather_code[idx], true);
+      }
+      fetchRadarImages();
     })
+    .catch(function(err){ console.error('Forecast error:', err); });
 }
 
 function fetchCurrentWeather(){
+  // ── Open-Meteo + Zippopotam (replaces dead TWC API) ──────────────────────
+  const units = CONFIG.units==='m' ? '&temperature_unit=celsius&wind_speed_unit=kmh' : '&temperature_unit=fahrenheit&wind_speed_unit=mph';
+  const speedUnit = CONFIG.units==='m' ? 'km/h' : 'mph';
 
-  //Let's check what we're dealing with
-  let location = "";
-  console.log(CONFIG.locationMode)
-  if(CONFIG.locationMode=="POSTAL") {location=`postalKey=${zipCode}:${CONFIG.countryCode}`}
-  else if (CONFIG.locationMode=="AIRPORT") {
-    //Determine whether this is an IATA or ICAO code
-    let airportCodeLength=airportCode.length;
-    if(airportCodeLength==3){location=`iataCode=${airportCode}`}
-    else if (airportCodeLength==4){location=`icaoCode=${airportCode}`}
-    else {
-      alert("Please enter a valid ICAO or IATA Code")
-      console.error(`Expected Airport Code Lenght to be 3 or 4 but was ${airportCodeLength}`)
-      return;
-    }
-  }
-  else {
-    alert("Please select a location type");
-    console.error("Unknown what to use for location")
-    return;
-  }
-  
+  // Step 1: zip → lat/lon via zippopotam.us (free, no key)
+  var geoUrl = CONFIG.locationMode==='AIRPORT'
+    ? `https://api.zippopotam.us/airport/${airportCode}`
+    : `https://api.zippopotam.us/us/${zipCode}`;
 
-  fetch(`https://api.weather.com/v3/location/point?${location}&language=${CONFIG.language}&format=json&apiKey=${CONFIG.secrets.twcAPIKey}`)
-      .then(function (response) {
-          if (response.status == 404) {
-              alert("Location not found!")
-              console.log('conditions request error');
-              return;
-          }
-          if (response.status !== 200) {
-              alert("Something went wrong (check the console)")
-              console.log('conditions request error');
-              return;
-          }
-      response.json().then(function(data) {
-        try {
-          // which LOCALE?!
-          //Not sure about the acuracy of this. Remove this if necessary
-          if(CONFIG.locationMode=="AIRPORT"){
-            cityName = data.location.airportName
-            .toUpperCase() //Airport names are long
-            .replace("INTERNATIONAL","INTL.") //If a city name is too long, info bar breaks
-            .replace("AIRPORT","") //This is an attempt to fix it
-            .trim();
-            console.log(cityName);
-          } else {
-            //Shouldn't City Name be the field City Name, not Display Name?
-            cityName = data.location.city.toUpperCase();
-          }
-          latitude = data.location.latitude;
-          longitude = data.location.longitude;
-        } catch (err) {
-          alert('Enter valid ZIP code');
-          console.error(err)
-          getZipCodeFromUser();
-          return;
-        }
-        fetch(`https://api.weather.com/v1/geocode/${latitude}/${longitude}/observations/current.json?language=${CONFIG.language}&units=${CONFIG.units}&apiKey=${CONFIG.secrets.twcAPIKey}`)
-          .then(function(response) {
-            if (response.status !== 200) {
-              console.log("conditions request error");
-              return;
-            }
-            response.json().then(function(data) {
-              // cityName is set in the above fetch call and not this one
-              let unit = data.observation[CONFIG.unitField];
-              currentTemperature = Math.round(unit.temp);
-              currentCondition = data.observation.phrase_32char;
-              windSpeed = `${data.observation.wdir_cardinal} ${unit.wspd} ${CONFIG.units === 'm' ? 'km/h' : 'mph'}`;
-              gusts = unit.gust || 'NONE';
-              feelsLike = unit.feels_like
-              visibility = Math.round(unit.vis)
-              humidity = unit.rh
-              dewPoint = unit.dewpt
-              pressure = unit.altimeter.toPrecision(4);
-              let ptendCode = data.observation.ptend_code
-              pressureTrend = (ptendCode == 1 || ptendCode == 3) ? '▲' : ptendCode == 0 ? '' : '▼'; // if ptendCode == 1 or 3 (rising/rising rapidly) up arrow else its steady then nothing else (falling (rapidly)) down arrow
-              currentIcon = data.observation.icon_code
-              fetchAlerts();
-            });
-          });
-      })
-    });
+  fetch(geoUrl)
+    .then(function(r){
+      if (!r.ok) { alert('Location not found!'); return Promise.reject('geo'); }
+      return r.json();
+    })
+    .then(function(geo) {
+      if (CONFIG._stationOverride) {
+        cityName = CONFIG._stationOverride.toUpperCase();
+      } else {
+        cityName = (geo.places[0]['place name'] || geo.places[0].city || zipCode).toUpperCase();
+      }
+      latitude  = parseFloat(geo.places[0].latitude);
+      longitude = parseFloat(geo.places[0].longitude);
 
-
+      // Step 2: current conditions from Open-Meteo
+      return fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,surface_pressure,weather_code,wind_speed_10m,wind_direction_10m,is_day${units}&forecast_days=1`);
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var c = data.current;
+      isDay            = c.is_day === 1;
+      currentTemperature = Math.round(c.temperature_2m);
+      currentCondition = _wmoCondition(c.weather_code);
+      currentIcon      = _wmoIcon(c.weather_code, isDay);
+      windSpeed        = `${_degToCardinal(c.wind_direction_10m)} ${Math.round(c.wind_speed_10m)} ${speedUnit}`;
+      gusts            = 'NONE';
+      feelsLike        = Math.round(c.apparent_temperature);
+      humidity         = c.relative_humidity_2m;
+      dewPoint         = _dewPoint(currentTemperature, humidity);
+      visibility       = 10;
+      pressure         = (c.surface_pressure * 0.02953).toFixed(2);
+      pressureTrend    = '';
+      fetchAlerts();
+    })
+    .catch(function(err){ if(err!=='geo') console.error('Weather error:', err); });
 }
 
 function fetchRadarImages(){

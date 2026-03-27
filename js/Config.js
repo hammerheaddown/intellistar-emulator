@@ -84,6 +84,7 @@ window.CONFIG = {
     CONFIG.unitField = CONFIG.units === 'm' ? 'metric' : (CONFIG.units === 'h' ? 'uk_hybrid' : 'imperial')
     fetchCurrentWeather();
   },
+
   load: () => {
     let settingsPrompt = getElement('settings-prompt')
     let advancedSettingsOptions = getElement('advanced-settings-options')
@@ -141,3 +142,22 @@ window.CONFIG = {
 }
 
 CONFIG.unitField = CONFIG.units === 'm' ? 'metric' : (CONFIG.units === 'h' ? 'uk_hybrid' : 'imperial')
+
+// ── URL Parameter Bootstrap ───────────────────────────────────────────────────
+// Allows the compositor weather layer to pass params and skip the settings screen.
+// Usage: ?zip=49721&crawl=Custom+text&station=WJRT-TV&loop=0&units=metric
+(function() {
+  var p = new URLSearchParams(window.location.search);
+  if (p.has('zip')) {
+    localStorage.setItem('zip-code', p.get('zip'));
+    CONFIG.loop = true; // triggers auto-start in load()
+  }
+  if (p.has('crawl'))   CONFIG.crawl = decodeURIComponent(p.get('crawl'));
+  if (p.has('station')) CONFIG._stationOverride = decodeURIComponent(p.get('station'));
+  if (p.has('units') && p.get('units') === 'metric') {
+    CONFIG.units     = 'm';
+    CONFIG.unitField = 'metric';
+  }
+  // loop=0 means one-shot: fire postMessage('weather-done') when rotation ends
+  if (p.has('loop') && p.get('loop') === '0') CONFIG._oneShot = true;
+})();

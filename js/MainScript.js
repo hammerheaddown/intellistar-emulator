@@ -299,6 +299,11 @@ function scrollCC(){
 // Called at end of sequence. Animates everything out and shows ending text
 function endSequence(){
   clearInfoBar();
+  // Notify compositor parent that the weather rotation is done (auto-dismiss)
+  if (CONFIG._oneShot) {
+    window.parent.postMessage('weather-done', '*');
+    window.top.postMessage('weather-done', '*');
+  }
 }
 
 function twcLogoClick() {
