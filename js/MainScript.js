@@ -25,6 +25,11 @@ window.onload = function () {
   if (_urlParams.has('zip')) {
     zipCode = _urlParams.get('zip');
     CONFIG.locationMode = 'POSTAL';
+    // Apply URL params directly here (URLSearchParams.get() decodes + as space)
+    if (_urlParams.has('crawl'))    CONFIG.crawl    = _urlParams.get('crawl');
+    if (_urlParams.has('greeting')) CONFIG.greeting = _urlParams.get('greeting');
+    if (_urlParams.has('station'))  CONFIG._stationOverride = _urlParams.get('station');
+    if (_urlParams.has('vol'))      CONFIG._volume  = Math.max(0, Math.min(1, parseFloat(_urlParams.get('vol')) || 0.5));
     preLoadMusic();
     setMainBackground();
     resizeWindow();
