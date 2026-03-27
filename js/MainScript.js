@@ -31,6 +31,11 @@ window.onload = function () {
     if (_urlParams.has('station'))  CONFIG._stationOverride = _urlParams.get('station');
     if (_urlParams.has('vol'))      CONFIG._volume  = Math.max(0, Math.min(1, parseFloat(_urlParams.get('vol')) || 0.5));
     preLoadMusic();
+    // Start music silently now so it's buffered before weather data loads
+    var _earlyVol = (CONFIG._volume !== undefined) ? CONFIG._volume : 1;
+    music.volume = 0;
+    music.play().catch(function(){});
+    _fadeAudio(music, 0, _earlyVol, 1500);
     setMainBackground();
     resizeWindow();
     setClockTime();
@@ -148,9 +153,12 @@ function startAnimation(){
 
   if (CONFIG._fast) {
     // Skip jingle + greeting page — go straight to weather
-    music.volume = 0;
-    music.play().catch(function(){});
-    _fadeAudio(music, 0, vol, 1500);
+    // Music may already be playing (started early in onload fast path)
+    if (music.paused) {
+      music.volume = 0;
+      music.play().catch(function(){});
+      _fadeAudio(music, 0, vol, 1500);
+    }
     clearGreetingPage();
   } else {
     jingle.volume = vol;
